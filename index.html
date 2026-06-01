@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wordle Helper</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 { margin-bottom: 6px; font-size: 1.8rem; letter-spacing: 2px; }
+
+        .how-to-use {
+            font-size: 0.85rem; color: #888; margin-bottom: 8px;
+            cursor: pointer; text-decoration: underline; transition: color 0.2s;
+        }
+        .how-to-use:hover { color: #bbb; }
+
+        .settings-bar {
+            display: flex; gap: 10px; flex-wrap: wrap;
+            justify-content: center; margin-bottom: 20px;
+        }
+        .toggle-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 14px; border-radius: 20px; border: 1px solid #444;
+            background: #2a2a2a; color: #aaa; font-size: 0.78rem;
+            cursor: pointer; transition: all 0.2s; user-select: none;
+        }
+        .toggle-btn.active { border-color: #6aaa64; color: #6aaa64; background: #1a2e1a; }
+        .toggle-btn .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #555; transition: background 0.2s; flex-shrink: 0;
+        }
+        .toggle-btn.active .dot { background: #6aaa64; }
+
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; background: rgba(0,0,0,0.7);
+            z-index: 1000; justify-content: center; align-items: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #2a2a2a; border-radius: 12px; padding: 28px;
+            max-width: 460px; width: 90%; position: relative;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5); max-height: 90vh; overflow-y: auto;
+        }
+        .modal h2 { margin-bottom: 16px; font-size: 1.2rem; }
+        .modal p { font-size: 0.9rem; color: #ccc; line-height: 1.7; margin-bottom: 12px; }
+        .modal .color-badge {
+            padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 0.8rem;
+        }
+        .modal-close {
+            position: absolute; top: 12px; right: 16px; font-size: 1.4rem;
+            cursor: pointer; color: #888; background: none; border: none; transition: color 0.2s;
+        }
+        .modal-close:hover { color: #fff; }
+
+        .input-row {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+        }
+        #findBtn {
+            padding: 0 18px; height: 62px; font-size: 1rem; border: none;
+            border-radius: 6px; cursor: pointer; font-weight: bold;
+            background-color: #538d4e; color: #fff;
+            transition: opacity 0.2s; white-space: nowrap; flex-shrink: 0;
+        }
+        #findBtn:hover { opacity: 0.85; }
+
+        .boxes { display: flex; gap: 8px; }
+
+        .tile-wrapper { width: 62px; height: 62px; perspective: 400px; }
+        .tile-inner {
+            width: 100%; height: 100%; position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.18s ease-in;
+        }
+        .tile-inner.flip-down  { transform: rotateX(-90deg); }
+        .tile-inner.flip-up    { transform: rotateX(0deg); transition: transform 0.18s ease-out; }
+
+        .letter-box {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            font-size: 1.8rem; font-weight: bold;
+            text-align: center; text-transform: uppercase;
+            border: 2px solid #3a3a3c; border-radius: 6px;
+            background-color: #3a3a3c; color: #ffffff;
+            outline: none; caret-color: #fff; cursor: pointer;
+        }
+        .letter-box:focus { border-color: #888; }
+        .letter-box.green  { background-color: #6aaa64; border-color: #6aaa64; }
+        .letter-box.yellow { background-color: #c9b458; border-color: #c9b458; }
+        .letter-box.gray   { background-color: #3a3a3c; border-color: #3a3a3c; }
+
+        .pool-count { font-size: 0.9rem; color: #aaa; margin-top: 8px; text-align: center; }
+
+        .controls {
+            display: flex; gap: 10px; margin-bottom: 6px;
+            flex-wrap: wrap; justify-content: center; align-items: center;
+        }
+        .controls button {
+            padding: 10px 20px; font-size: 1rem; border: none;
+            border-radius: 6px; cursor: pointer; font-weight: bold;
+            transition: opacity 0.2s; background-color: #3a3a3c; color: #fff;
+        }
+        .controls button:hover { opacity: 0.8; background-color: #555; }
+
+        /* ── Side-by-side panels row (3 columns) ── */
+        .panels-row {
+            display: none;
+            width: 100%; max-width: 900px;
+            gap: 12px; margin-bottom: 14px;
+            flex-direction: row; align-items: flex-start;
+        }
+        .panels-row.visible { display: flex; }
+
+        #heatmapSection {
+            flex: 1.2; min-width: 0;
+            background: #111; border-radius: 8px; padding: 14px;
+        }
+        #heatmapSection h3 { font-size: 0.82rem; color: #888; margin-bottom: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        .heatmap-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+        .hm-cell {
+            width: 32px; height: 32px; border-radius: 5px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            font-weight: bold; color: #fff; transition: background 0.3s;
+        }
+        .hm-cell .hm-letter { font-size: 0.8rem; line-height: 1; }
+        .hm-cell .hm-pct    { font-size: 0.46rem; color: rgba(255,255,255,0.65); line-height: 1; margin-top: 1px; }
+
+        #randomSection {
+            flex: 1; min-width: 0;
+            background: #111; border-radius: 8px; padding: 14px;
+        }
+        #randomSection h3 { font-size: 0.82rem; color: #888; margin-bottom: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        #randomSection .word-list { display: flex; flex-wrap: wrap; gap: 6px; }
+        #randomSection .word-item {
+            padding: 4px 8px; background-color: #1e1e1e; border-radius: 4px;
+            cursor: pointer; font-family: monospace; font-size: 0.9rem;
+            transition: background-color 0.15s; text-decoration: underline;
+            text-decoration-color: #444; border: 1px solid #2a2a2a;
+        }
+        #randomSection .word-item:hover { background-color: #2a2a2a; }
+        #randomSection .refresh-btn {
+            margin-top: 10px; padding: 5px 12px; font-size: 0.78rem;
+            border: 1px solid #444; border-radius: 4px; background: #2a2a2a;
+            color: #aaa; cursor: pointer; transition: all 0.2s;
+        }
+        #randomSection .refresh-btn:hover { border-color: #888; color: #fff; }
+
+        #bestGuessSection {
+            flex: 1; min-width: 0;
+            background: #111; border-radius: 8px; padding: 14px;
+        }
+        #bestGuessSection h3 { font-size: 0.82rem; color: #888; margin-bottom: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        .best-guess-list { display: flex; flex-direction: column; gap: 6px; }
+        .best-guess-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 10px; background: #1e1e1e; border-radius: 5px;
+            cursor: pointer; transition: background 0.15s; border: 1px solid #2a2a2a;
+        }
+        .best-guess-item:hover { background: #2a2a2a; border-color: #444; }
+        .best-guess-word { font-family: monospace; font-size: 1rem; text-decoration: underline; text-decoration-color: #555; }
+        .best-guess-score { font-size: 0.7rem; color: #6aaa64; }
+        #bestGuessStatus { color: #666; font-size: 0.82rem; font-style: italic; }
+
+        @media (max-width: 700px) {
+            .panels-row { flex-direction: column; max-width: 600px; }
+        }
+
+        .results {
+            background-color: #111; border-radius: 8px; padding: 16px;
+            width: 100%; max-width: 600px; min-height: 200px;
+            max-height: 400px; overflow-y: auto;
+        }
+        .results-header { color: #888; margin-bottom: 10px; font-size: 0.9rem; }
+        .word-list { display: flex; flex-wrap: wrap; gap: 8px; }
+        .word-item {
+            padding: 4px 10px; background-color: #222; border-radius: 4px;
+            cursor: pointer; font-family: monospace; font-size: 1rem;
+            transition: background-color 0.15s; text-decoration: underline;
+            text-decoration-color: #555;
+        }
+        .word-item:hover { background-color: #333; }
+        .more-text { color: #888; font-size: 0.85rem; margin-top: 10px; }
+
+        .toast {
+            position: fixed; top: 20%; left: 50%; transform: translateX(-50%);
+            background: #555; color: #fff; padding: 10px 20px;
+            border-radius: 6px; font-size: 0.9rem; z-index: 2000;
+            opacity: 1; transition: opacity 0.4s; pointer-events: none;
+        }
+        .toast.fade-out { opacity: 0; }
+
+        @media (max-width: 480px) {
+            .tile-wrapper { width: 50px; height: 50px; }
+            .letter-box { font-size: 1.4rem; }
+            .boxes { gap: 5px; }
+            h1 { font-size: 1.4rem; }
+            #findBtn { height: 50px; padding: 0 12px; font-size: 0.9rem; }
+        }
+    </style>
+</head>
+<body>
+    <h1>WORDLE HELPER</h1>
+    <span class="how-to-use" id="howToUse">How to use</span>
+
+
+    <div class="settings-bar">
+        <div class="toggle-btn active" id="toggleHeatmap">
+            <span class="dot"></span> Letter Heatmap
+        </div>
+        <div class="toggle-btn active" id="toggleBestGuess">
+            <span class="dot"></span> Best Guess
+        </div>
+    </div>
+
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+            <h2>How to Use</h2>
+            <p>1. Type your guess into the boxes.</p>
+            <p>2. Right-click a box to change its color:<br>
+                <span class="color-badge" style="background:#6aaa64;color:#fff;">green</span> = correct spot &nbsp;
+                <span class="color-badge" style="background:#c9b458;color:#fff;">yellow</span> = wrong spot &nbsp;
+                <span class="color-badge" style="background:#3a3a3c;color:#ccc;">gray</span> = not in word
+            </p>
+            <p>3. Click <strong>Find</strong> to see all possible words.</p>
+            <p>4. Click any word in the results to fill the boxes. Green boxes stay locked.</p>
+            <p style="margin-top:16px; border-top:1px solid #444; padding-top:12px;">
+                <strong>Random</strong> — shows 10 random suggestions, preferring all-different-letter words.<br><br>
+                <strong>Reset</strong> — clears everything and restores the full word pool.<br><br>
+                <strong>Letter Heatmap</strong> — shows how often each letter appears in the remaining pool after Find. Darker = more common.<br><br>
+                <strong>Best Guess</strong> — ranks top suggestions by how many pool words they'd eliminate (entropy scoring). Appears after Find.
+            </p>
+            <p style="color:#888; font-size:0.8rem; margin-top:8px;">On mobile: long-press a box to change color.</p>
+            <p style="margin-top:12px; border-top:1px solid #444; padding-top:12px; font-size:0.82rem; color:#888;">
+                <a href="https://gist.githubusercontent.com/dracos/dd0668f281e685bad51479e5acaadb93/raw/6bfa15d263d6d5b63840a8e5b64e04b382fdb079/valid-wordle-words.txt" target="_blank" rel="noopener" style="color:#6aaa64;">Source of word list</a>
+            </p>
+        </div>
+    </div>
+
+    <div class="input-row">
+        <div class="boxes" id="boxes"></div>
+        <button id="findBtn">Find</button>
+    </div>
+
+    <div class="controls">
+        <button id="randomBtn">Random</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+    <div class="pool-count" id="poolCount"></div>
+
+    <div class="panels-row" id="panelsRow">
+        <div id="heatmapSection">
+            <h3>Letter Frequency in Remaining Pool</h3>
+            <div class="heatmap-grid" id="heatmapGrid"></div>
+        </div>
+
+        <div id="randomSection">
+            <h3>Random Picks</h3>
+            <div class="word-list" id="randomWordList"></div>
+            <button class="refresh-btn" id="refreshRandomBtn">↻ Refresh</button>
+        </div>
+
+        <div id="bestGuessSection">
+            <h3>Best Next Guesses <span style="color:#555;font-weight:normal;font-size:0.75rem;text-transform:none;">(by letters eliminated)</span></h3>
+            <div class="best-guess-list" id="bestGuessList">
+                <span id="bestGuessStatus">Computing…</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="results" id="results">
+        <div class="results-header" id="resultsHeader">Loading word list...</div>
+        <div class="word-list" id="wordList"></div>
+        <div class="more-text" id="moreText"></div>
+    </div>
+
+    <script src="words.js"></script>
+    <script>
+
+        const settings = {
+            heatmap: true,
+            bestGuess: true,
+        };
+
+        const WORD_LENGTH = 5;
+        const STATE_ORDER = ['gray', 'green', 'yellow'];
+        let boxStates = Array(WORD_LENGTH).fill('gray');
+        let activePool = [];
+
+        const boxesContainer  = document.getElementById('boxes');
+        const poolCountEl     = document.getElementById('poolCount');
+        const resultsHeader   = document.getElementById('resultsHeader');
+        const wordListEl      = document.getElementById('wordList');
+        const moreTextEl      = document.getElementById('moreText');
+        const modalOverlay    = document.getElementById('modalOverlay');
+        const panelsRow       = document.getElementById('panelsRow');
+        const heatmapSection  = document.getElementById('heatmapSection');
+        const heatmapGrid     = document.getElementById('heatmapGrid');
+        const randomSection   = document.getElementById('randomSection');
+        const randomWordList  = document.getElementById('randomWordList');
+        const bestGuessSection= document.getElementById('bestGuessSection');
+        const bestGuessList   = document.getElementById('bestGuessList');
+        const bestGuessStatus = document.getElementById('bestGuessStatus');
+
+        document.getElementById('howToUse').addEventListener('click', () => modalOverlay.classList.add('active'));
+        document.getElementById('modalClose').addEventListener('click', () => modalOverlay.classList.remove('active'));
+        modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) modalOverlay.classList.remove('active'); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') modalOverlay.classList.remove('active'); });
+
+        function setupToggle(id, key, onToggle) {
+            const btn = document.getElementById(id);
+            btn.addEventListener('click', () => {
+                settings[key] = !settings[key];
+                btn.classList.toggle('active', settings[key]);
+                onToggle(settings[key]);
+            });
+        }
+
+        setupToggle('toggleHeatmap', 'heatmap', (on) => {
+            if (panelsRow.classList.contains('visible')) {
+                heatmapSection.style.display = on ? '' : 'none';
+            }
+        });
+
+        setupToggle('toggleBestGuess', 'bestGuess', (on) => {
+            if (panelsRow.classList.contains('visible')) {
+                bestGuessSection.style.display = on ? '' : 'none';
+            }
+        });
+
+        function rebuildPool() {
+            activePool = WORDS.filter(w => w.length === WORD_LENGTH);
+            updatePoolCount();
+        }
+
+        function init() {
+            rebuildPool();
+            createBoxes();
+            updatePoolCount();
+            showRandomRecommendations();
+        }
+
+        function createBoxes() {
+            boxesContainer.innerHTML = '';
+            for (let i = 0; i < WORD_LENGTH; i++) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'tile-wrapper';
+
+                const inner = document.createElement('div');
+                inner.className = 'tile-inner';
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.maxLength = 1;
+                input.className = 'letter-box gray';
+                input.dataset.index = i;
+                input.setAttribute('aria-label', `Letter ${i + 1}`);
+
+                input.addEventListener('input', (e) => {
+                    let val = e.target.value.replace(/[^a-zA-Z]/g, '');
+                    if (val.length > 1) val = val.slice(-1);
+                    e.target.value = val.toUpperCase();
+                    if (val && i < WORD_LENGTH - 1) {
+                        boxesContainer.children[i + 1].querySelector('input').focus();
+                    }
+                });
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Backspace' && !e.target.value && i > 0) {
+                        boxesContainer.children[i - 1].querySelector('input').focus();
+                    }
+                    if (e.key === 'Enter') findCandidates();
+                });
+
+                input.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    cycleState(i);
+                });
+
+                let pressTimer;
+                input.addEventListener('touchstart', () => {
+                    pressTimer = setTimeout(() => cycleState(i), 500);
+                });
+                input.addEventListener('touchend', () => clearTimeout(pressTimer));
+                input.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+                inner.appendChild(input);
+                wrapper.appendChild(inner);
+                boxesContainer.appendChild(wrapper);
+            }
+        }
+
+        function getInput(i) {
+            return boxesContainer.children[i].querySelector('input');
+        }
+
+        function flipTile(index, newState, callback) {
+            const inner = boxesContainer.children[index].querySelector('.tile-inner');
+            const input = inner.querySelector('input');
+
+            inner.classList.add('flip-down');
+            setTimeout(() => {
+                input.className = 'letter-box ' + newState;
+                inner.classList.remove('flip-down');
+                inner.classList.add('flip-up');
+                setTimeout(() => {
+                    inner.classList.remove('flip-up');
+                    if (callback) callback();
+                }, 180);
+            }, 180);
+        }
+
+        function cycleState(index) {
+            const currentIdx = STATE_ORDER.indexOf(boxStates[index]);
+            const newState = STATE_ORDER[(currentIdx + 1) % STATE_ORDER.length];
+            boxStates[index] = newState;
+            flipTile(index, newState);
+        }
+
+        function applyBoxStyle(index) {
+            getInput(index).className = 'letter-box ' + boxStates[index];
+        }
+
+        function collectConstraints() {
+            const greens = {};
+            const yellowsPos = {};
+            const grayCounts = {};
+            const gyCounts = {};
+
+            for (let i = 0; i < WORD_LENGTH; i++) {
+                const letter = getInput(i).value.toLowerCase();
+                if (!letter || !letter.match(/^[a-z]$/)) continue;
+                const state = boxStates[i];
+
+                if (state === 'green') {
+                    greens[i] = letter;
+                    gyCounts[letter] = (gyCounts[letter] || 0) + 1;
+                } else if (state === 'yellow') {
+                    if (!yellowsPos[letter]) yellowsPos[letter] = new Set();
+                    yellowsPos[letter].add(i);
+                    gyCounts[letter] = (gyCounts[letter] || 0) + 1;
+                } else {
+                    grayCounts[letter] = (grayCounts[letter] || 0) + 1;
+                }
+            }
+
+            const minCount = {};
+            const maxCount = {};
+            const allLetters = new Set([...Object.keys(grayCounts), ...Object.keys(gyCounts)]);
+
+            for (const ch of allLetters) {
+                const mn = gyCounts[ch] || 0;
+                minCount[ch] = mn;
+                maxCount[ch] = (grayCounts[ch] || 0) > 0 ? mn : null;
+            }
+
+            return { greens, yellowsPos, minCount, maxCount };
+        }
+
+        function wordOk(word, greens, yellowsPos, minCount, maxCount) {
+            if (word.length !== WORD_LENGTH) return false;
+
+            for (const [i, ch] of Object.entries(greens)) {
+                if (word[parseInt(i)] !== ch) return false;
+            }
+
+            for (const [ch, badPositions] of Object.entries(yellowsPos)) {
+                for (const pos of badPositions) {
+                    if (word[pos] === ch) return false;
+                }
+            }
+
+            const counts = {};
+            for (const ch of word) counts[ch] = (counts[ch] || 0) + 1;
+
+            for (const [ch, mn] of Object.entries(minCount)) {
+                if ((counts[ch] || 0) < mn) return false;
+            }
+            for (const [ch, mx] of Object.entries(maxCount)) {
+                if (mx !== null && (counts[ch] || 0) > mx) return false;
+            }
+            for (const ch of Object.keys(yellowsPos)) {
+                if ((counts[ch] || 0) === 0) return false;
+            }
+
+            return true;
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.classList.add('fade-out'), 2600);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        function findCandidates() {
+            let filledCount = 0;
+            for (let i = 0; i < WORD_LENGTH; i++) {
+                if (getInput(i).value.trim()) filledCount++;
+            }
+            if (filledCount < WORD_LENGTH) {
+                showToast('Fill all 5 boxes first');
+                return;
+            }
+
+            if (activePool.length === 0) {
+                resultsHeader.textContent = 'Active pool is empty. Click Reset.';
+                wordListEl.innerHTML = '';
+                moreTextEl.textContent = '';
+                return;
+            }
+
+            const { greens, yellowsPos, minCount, maxCount } = collectConstraints();
+            const hasConstraints = Object.keys(greens).length > 0 ||
+                Object.keys(yellowsPos).length > 0 ||
+                Object.keys(minCount).length > 0;
+
+            let results = hasConstraints
+                ? activePool.filter(w => wordOk(w, greens, yellowsPos, minCount, maxCount))
+                : [...activePool];
+
+            results.sort();
+            activePool = results;
+            updatePoolCount();
+            renderWords(results, `${results.length} match(es):`);
+
+            panelsRow.classList.add('visible');
+            heatmapSection.style.display = settings.heatmap ? '' : 'none';
+            bestGuessSection.style.display = settings.bestGuess ? '' : 'none';
+            updateHeatmap();
+            updateRandomPanel();
+            updateBestGuess();
+        }
+
+        function getRandomPicks() {
+            if (activePool.length === 0) return [];
+            const unique = activePool.filter(w => new Set(w).size === w.length);
+            const source = unique.length >= 10 ? unique : activePool;
+            const picks = [];
+            const copy = [...source];
+            const count = Math.min(10, copy.length);
+            for (let i = 0; i < count; i++) {
+                const idx = Math.floor(Math.random() * copy.length);
+                picks.push(copy[idx]);
+                copy.splice(idx, 1);
+            }
+            picks.sort();
+            return picks;
+        }
+
+        function showRandomRecommendations() {
+            if (activePool.length === 0) {
+                resultsHeader.textContent = 'Active pool is empty. Click Reset.';
+                wordListEl.innerHTML = '';
+                moreTextEl.textContent = '';
+                updatePoolCount();
+                return;
+            }
+            const picks = getRandomPicks();
+            renderWords(picks, 'Random picks from active pool (unique-letter bias):');
+            updatePoolCount();
+        }
+
+        function updateRandomPanel() {
+            randomWordList.innerHTML = '';
+            const picks = getRandomPicks();
+            for (const word of picks) {
+                const span = document.createElement('span');
+                span.className = 'word-item';
+                span.textContent = word;
+                span.addEventListener('click', () => fillBoxes(word));
+                randomWordList.appendChild(span);
+            }
+        }
+
+        function resetFilters() {
+            for (let i = 0; i < WORD_LENGTH; i++) {
+                getInput(i).value = '';
+                boxStates[i] = 'gray';
+                applyBoxStyle(i);
+            }
+
+            rebuildPool();
+            panelsRow.classList.remove('visible');
+            resultsHeader.textContent = 'Filters cleared. Active pool restored.';
+            wordListEl.innerHTML = '';
+            moreTextEl.textContent = '';
+            showRandomRecommendations();
+        }
+
+        function renderWords(words, header, limit = 500) {
+            resultsHeader.textContent = header || '';
+            wordListEl.innerHTML = '';
+            moreTextEl.textContent = '';
+
+            const show = words.slice(0, limit);
+            for (const word of show) {
+                const span = document.createElement('span');
+                span.className = 'word-item';
+                span.textContent = word;
+                span.addEventListener('click', () => fillBoxes(word));
+                wordListEl.appendChild(span);
+            }
+
+            if (words.length > limit) {
+                moreTextEl.textContent = `... (${words.length - limit} more not shown)`;
+            }
+        }
+
+        function fillBoxes(word) {
+            for (let i = 0; i < WORD_LENGTH && i < word.length; i++) {
+                if (boxStates[i] === 'green') continue;
+                getInput(i).value = word[i].toUpperCase();
+                boxStates[i] = 'gray';
+                applyBoxStyle(i);
+            }
+        }
+
+        function updatePoolCount() {
+            poolCountEl.textContent = `Active pool: ${activePool.length}`;
+        }
+
+        function updateHeatmap() {
+            if (!settings.heatmap) return;
+            heatmapSection.style.display = '';
+
+            const freq = {};
+            for (const word of activePool) {
+                for (const ch of word) {
+                    freq[ch] = (freq[ch] || 0) + 1;
+                }
+            }
+
+            const total = activePool.length * WORD_LENGTH || 1;
+            const letters = 'abcdefghijklmnopqrstuvwxyz'.split('');
+            const maxFreq = Math.max(...letters.map(l => freq[l] || 0), 1);
+
+            heatmapGrid.innerHTML = '';
+            for (const letter of letters) {
+                const count = freq[letter] || 0;
+                const ratio = count / maxFreq;
+                const pct = ((count / total) * 100).toFixed(1);
+
+                const r = Math.round(58  + (106 - 58)  * ratio);
+                const g = Math.round(58  + (170 - 58)  * ratio);
+                const b = Math.round(60  + (100 - 60)  * ratio);
+                const alpha = 0.25 + 0.75 * ratio;
+
+                const cell = document.createElement('div');
+                cell.className = 'hm-cell';
+                cell.style.background = `rgba(${r},${g},${b},${alpha})`;
+                cell.title = `${letter.toUpperCase()}: ${count} occurrences (${pct}%)`;
+                cell.innerHTML = `<span class="hm-letter">${letter.toUpperCase()}</span><span class="hm-pct">${pct}%</span>`;
+                heatmapGrid.appendChild(cell);
+            }
+        }
+
+        let bestGuessWorker = null;
+
+        function updateBestGuess() {
+            if (!settings.bestGuess) {
+                bestGuessSection.style.display = 'none';
+                return;
+            }
+            bestGuessSection.style.display = '';
+
+            if (activePool.length === 0) {
+                bestGuessList.innerHTML = '<span id="bestGuessStatus">Pool is empty.</span>';
+                return;
+            }
+            if (activePool.length === 1) {
+                bestGuessList.innerHTML = '';
+                const item = makeBestGuessItem(activePool[0], '100%');
+                bestGuessList.appendChild(item);
+                return;
+            }
+
+            bestGuessList.innerHTML = '<span id="bestGuessStatus">Computing…</span>';
+
+            setTimeout(() => {
+                const candidates = computeBestGuesses(activePool, 8);
+                bestGuessList.innerHTML = '';
+                for (const { word, score } of candidates) {
+                    bestGuessList.appendChild(makeBestGuessItem(word, score));
+                }
+            }, 10);
+        }
+
+        function makeBestGuessItem(word, score) {
+            const item = document.createElement('div');
+            item.className = 'best-guess-item';
+            item.innerHTML = `<span class="best-guess-word">${word}</span><span class="best-guess-score">${score}</span>`;
+            item.addEventListener('click', () => fillBoxes(word));
+            return item;
+        }
+
+        function computeBestGuesses(pool, topN) {
+            const MAX_CANDIDATES = 300;
+            const MAX_POOL_EVAL  = 200;
+
+            let candidates = pool;
+            if (candidates.length > MAX_CANDIDATES) {
+                const unique = pool.filter(w => new Set(w).size === w.length);
+                candidates = unique.length >= MAX_CANDIDATES
+                    ? shuffleSample(unique, MAX_CANDIDATES)
+                    : [...unique, ...shuffleSample(pool.filter(w => new Set(w).size < w.length), MAX_CANDIDATES - unique.length)];
+            }
+
+            const evalPool = pool.length > MAX_POOL_EVAL
+                ? shuffleSample(pool, MAX_POOL_EVAL)
+                : pool;
+
+            const scored = candidates.map(guess => {
+                const eliminated = scoreGuess(guess, evalPool);
+                return { word: guess, eliminated };
+            });
+
+            scored.sort((a, b) => b.eliminated - a.eliminated);
+            const top = scored.slice(0, topN);
+            const best = top[0].eliminated;
+
+            return top.map(({ word, eliminated }) => ({
+                word,
+                score: best > 0 ? `~${Math.round((eliminated / evalPool.length) * 100)}% elim` : 'n/a',
+            }));
+        }
+
+        function scoreGuess(guess, pool) {
+            const buckets = {};
+            for (const answer of pool) {
+                const key = getPattern(guess, answer);
+                buckets[key] = (buckets[key] || 0) + 1;
+            }
+            const n = pool.length;
+            let sumSq = 0;
+            for (const k of Object.keys(buckets)) sumSq += buckets[k] * buckets[k];
+            const expectedRemaining = sumSq / n;
+            return n - expectedRemaining;
+        }
+
+        function getPattern(guess, answer) {
+            const result = ['X','X','X','X','X'];
+            const answerArr = answer.split('');
+            const used = [false,false,false,false,false];
+
+            for (let i = 0; i < 5; i++) {
+                if (guess[i] === answer[i]) {
+                    result[i] = 'G';
+                    used[i] = true;
+                }
+            }
+            for (let i = 0; i < 5; i++) {
+                if (result[i] === 'G') continue;
+                for (let j = 0; j < 5; j++) {
+                    if (!used[j] && guess[i] === answerArr[j]) {
+                        result[i] = 'Y';
+                        used[j] = true;
+                        break;
+                    }
+                }
+            }
+            return result.join('');
+        }
+
+        function shuffleSample(arr, n) {
+            const copy = [...arr];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy.slice(0, n);
+        }
+
+        document.getElementById('findBtn').addEventListener('click', findCandidates);
+        document.getElementById('randomBtn').addEventListener('click', showRandomRecommendations);
+        document.getElementById('resetBtn').addEventListener('click', resetFilters);
+        document.getElementById('refreshRandomBtn').addEventListener('click', updateRandomPanel);
+
+        init();
+    </script>
+</body>
+</html>
